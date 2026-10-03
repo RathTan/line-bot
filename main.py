@@ -60,7 +60,7 @@ def handle_text_message(event):
     if "VIOLATION" in mod_result:
         sender_id = event.source.user_id
         warning_msg = (
-            f"⚠️️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
+            f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
             f"👤 ผู้ส่ง: {sender_id}\n"
             f"📋 เหตุผล: {mod_result}\n\n"
             f"🔔 แจ้งเตือนแอดมิน โปรดตรวจสอบครับ"
@@ -68,9 +68,12 @@ def handle_text_message(event):
         send_reply(event.reply_token, warning_msg)
         return
 
-    # 2. ถ้าข้อความปกติ แต่มีคนเรียกชื่อบอท (บอท, bot, calyx, แคลกซ์) ให้ตอบคุยด้วย
-    bot_names = ["บอท", "bot", "calyx", "แคลกซ์"]
-    if any(name in user_text.lower() for name in bot_names):
+    # 2. แปลงข้อความให้เป็นตัวพิมพ์เล็กทั้งหมดเพื่อเช็กคำ
+    text_lower = user_text.lower()
+    bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
+    
+    # ถ้ามีชื่อบอทอยู่ในข้อความ ให้ Gemini ตอบคุยกลับ
+    if any(keyword in text_lower for keyword in bot_keywords):
         chat_response = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=user_text,
