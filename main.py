@@ -14,7 +14,6 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# LINE User ID ของคุณสำหรับแท็กเตือน
 ADMIN_LINE_USER_ID = "Ce6d78c2ac3b5d00bc369a54ae6fe2921"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -33,17 +32,20 @@ CHAT_PROMPT = """
 คุณคือผู้ช่วยประจำกลุ่ม LINE ชื่อ Calyx เป็นมิตร สุภาพ ตอบสั้นกระชับ เป็นกันเอง
 """
 
-# ฟังก์ชันเรียก Gemini โดยใช้รุ่น gemini-3.8-flash
+# ฟังก์ชันช่วยเรียก Gemini แบบมีรุ่นสำรองกัน 503
 def generate_gemini_content(prompt_text):
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt_text
-        )
-        return response.text.strip()
-    except Exception as e:
-        print(f"Error calling Gemini API: {e}")
-        return None
+    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    for model_name in models_to_try:
+        try:
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt_text
+            )
+            return response.text.strip()
+        except Exception as e:
+            print(f"Error with model {model_name}: {e}")
+            continue
+    return None
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -65,12 +67,11 @@ def handle_text_message(event):
 
         if mod_result and "VIOLATION" in mod_result:
             sender_id = event.source.user_id
-            admin_tag = f"@{ADMIN_LINE_USER_ID}" if ADMIN_LINE_USER_ID else "แอดมิน"
             warning_msg = (
                 f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
                 f"👤 ผู้ส่ง: {sender_id}\n"
                 f"📋 เหตุผล: {mod_result}\n\n"
-                f"🔔 แจ้งเตือนแอดมิน {admin_tag} โปรดตรวจสอบครับ"
+                f"🔔 แจ้งเตือนแอดมิน โปรดตรวจสอบครับ"
             )
             send_reply(event.reply_token, warning_msg)
             return
@@ -96,3 +97,4 @@ def send_reply(reply_token, text):
                 messages=[TextMessage(text=text)]
             )
         )
+
