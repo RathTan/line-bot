@@ -20,7 +20,7 @@ configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# System Prompt สำหรับตรวจคุมกลุ่ม
+# System Prompt
 MODERATOR_PROMPT = """
 คุณคือระบบดูแลความปลอดภัยใน LINE Group
 วิเคราะห์ข้อความว่าเข้าข่ายละเมิดกฎหรือไม่ (คำหยาบ, สแปม, พนัน, NSFW)
@@ -28,10 +28,24 @@ MODERATOR_PROMPT = """
 - ถ้าละเมิด ตอบ: "VIOLATION: [บอกสาเหตุสั้นๆ]"
 """
 
-# System Prompt สำหรับคุยทักทาย
 CHAT_PROMPT = """
 คุณคือผู้ช่วยประจำกลุ่ม LINE ชื่อ Calyx เป็นมิตร สุภาพ ตอบสั้นกระชับ เป็นกันเอง
 """
+
+# ฟังก์ชันช่วยเรียก Gemini แบบมีรุ่นสำรองกัน 503
+def generate_gemini_content(prompt_text):
+    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    for model_name in models_to_try:
+        try:
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt_text
+            )
+            return response.text.strip()
+        except Exception as e:
+            print(f"Error with model {model_name}: {e}")
+            continue
+    return None
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -49,14 +63,9 @@ def handle_text_message(event):
     
     try:
         # 1. ให้ Gemini ตรวจความปลอดภัย
-        mod_response = gemini_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=f"{MODERATOR_PROMPT}\n\nข้อความที่จะตรวจ: {user_text}"
-        )
-        mod_result = mod_response.text.strip()
+        mod_result = generate_gemini_content(f"{MODERATOR_PROMPT}\n\nข้อความที่จะตรวจ: {user_text}")
         
-        # ถ้าพบข้อความผิดกฎ ให้เตือนทันที
-        if "VIOLATION" in mod_result:
+        if mod_result and "VIOLATION" in mod_result:
             sender_id = event.source.user_id
             warning_msg = (
                 f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
@@ -67,17 +76,14 @@ def handle_text_message(event):
             send_reply(event.reply_token, warning_msg)
             return
 
-        # 2. แปลงข้อความเพื่อเช็กว่ามีการเรียกชื่อบอทหรือไม่
+        # 2. เช็กการเรียกชื่อบอท
         text_lower = user_text.lower()
         bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
         
-        # ถ้ามีชื่อบอท ให้ Gemini ตอบคุยกลับ
         if any(keyword in text_lower for keyword in bot_keywords):
-            chat_response = gemini_client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}"
-            )
-            send_reply(event.reply_token, chat_response.text.strip())
+            chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}")
+            if chat_result:
+                send_reply(event.reply_token, chat_result)
 
     except Exception as e:
         print(f"Error handling message: {e}")
