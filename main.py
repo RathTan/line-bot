@@ -14,8 +14,8 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# นำ LINE User ID (รหัสขึ้นต้นด้วย U) ที่หาได้จากเว็บ LINE มาใส่ในอัญประกาศนี้
-ADMIN_LINE_USER_ID = ""
+# LINE User ID ของคุณเพื่อรับการแท็กเตือน
+ADMIN_LINE_USER_ID = "Ce6d78c2ac3b5d00bc369a54ae6fe2921"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
