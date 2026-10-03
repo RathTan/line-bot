@@ -48,7 +48,7 @@ async def webhook(request: Request):
 def handle_text_message(event):
     user_text = event.message.text
     
-    # 1. ให้ Gemini ตรวจความปลอดภัยก่อนเสมอ
+    # 1. ตรวจสอบความปลอดภัยด้วย Gemini
     mod_response = gemini_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=user_text,
@@ -68,11 +68,11 @@ def handle_text_message(event):
         send_reply(event.reply_token, warning_msg)
         return
 
-    # 2. แปลงข้อความให้เป็นตัวพิมพ์เล็กทั้งหมดเพื่อเช็กคำ
+    # 2. แปลงข้อความเพื่อเช็กว่ามีการเรียกชื่อบอทหรือไม่
     text_lower = user_text.lower()
     bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
     
-    # ถ้ามีชื่อบอทอยู่ในข้อความ ให้ Gemini ตอบคุยกลับ
+    # ถ้ามีชื่อบอท ให้ Gemini ตอบคุยกลับ
     if any(keyword in text_lower for keyword in bot_keywords):
         chat_response = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
