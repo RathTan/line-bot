@@ -57,7 +57,7 @@ def handle_text_message(event):
     
     # ส่งข้อความไปให้ Gemini วิเคราะห์
     response = gemini_client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         contents=user_text,
         config={"system_instruction": SYSTEM_INSTRUCTION}
     )
