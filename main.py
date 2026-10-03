@@ -13,7 +13,7 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# LINE User ID ของแอดมิน
+# LINE User ID ของแอดมินสำหรับแท็กเตือน
 ADMIN_LINE_USER_ID = "Ce6d78c2ac3b5d00bc369a54ae6fe2921"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -43,7 +43,7 @@ def generate_gemini_content(prompt_text, retries=2):
         except Exception as e:
             print(f"Attempt {attempt + 1} failed with error: {e}")
             if attempt < retries:
-                time.sleep(1) # รอ 1 วินาทีก่อนลองใหม่
+                time.sleep(1)
             else:
                 return None
 
@@ -78,12 +78,17 @@ def handle_text_message(event):
             send_reply(event.reply_token, warning_msg)
             return
 
-        # 2. เช็กการเรียกชื่อบอทเพื่อคุยตอบ
+        # 2. เช็กว่ามีการพิมพ์ @calyx หรือ @Calyx หรือไม่
         text_lower = user_text.lower()
-        bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
-        
-        if any(keyword in text_lower for keyword in bot_keywords):
-            chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}")
+        if "@calyx" in text_lower:
+            # ตัดคำว่า @calyx ออก เพื่อส่งเฉพาะเนื้อหาคำถามไปให้ Gemini
+            clean_prompt = user_text.replace("@calyx", "").replace("@Calyx", "").strip()
+            
+            # ถ้าพิมพ์แค่ @calyx มาเฉยๆ ให้ทักทายกลับ
+            if not clean_prompt:
+                clean_prompt = "สวัสดี"
+
+            chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {clean_prompt}")
             if chat_result:
                 send_reply(event.reply_token, chat_result)
 
