@@ -48,9 +48,9 @@ def handle_text_message(event):
     user_text = event.message.text
     
     try:
-        # 1. ให้ Gemini ตรวจความปลอดภัยโดยรวม System Prompt ไว้ในข้อความเดียว
+        # 1. ให้ Gemini ตรวจความปลอดภัย
         mod_response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=f"{MODERATOR_PROMPT}\n\nข้อความที่จะตรวจ: {user_text}"
         )
         mod_result = mod_response.text.strip()
@@ -74,7 +74,7 @@ def handle_text_message(event):
         # ถ้ามีชื่อบอท ให้ Gemini ตอบคุยกลับ
         if any(keyword in text_lower for keyword in bot_keywords):
             chat_response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.8-flash",
                 contents=f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}"
             )
             send_reply(event.reply_token, chat_response.text.strip())
