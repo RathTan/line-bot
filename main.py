@@ -1,5 +1,5 @@
 import os
-import time
+import io
 from fastapi import FastAPI, Request, HTTPException
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -9,17 +9,19 @@ from google import genai
 
 app = FastAPI()
 
+# ดึง Keys จาก Environment Variables บน Render
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# LINE User ID ของแอดมินสำหรับแท็กเตือน
+# LINE User ID ของคุณสำหรับแท็กเตือน
 ADMIN_LINE_USER_ID = "Ce6d78c2ac3b5d00bc369a54ae6fe2921"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
+# System Prompt
 MODERATOR_PROMPT = """
 คุณคือระบบดูแลความปลอดภัยใน LINE Group
 วิเคราะห์ข้อความว่าเข้าข่ายละเมิดกฎหรือไม่ (คำหยาบ, สแปม, พนัน, NSFW)
@@ -31,21 +33,17 @@ CHAT_PROMPT = """
 คุณคือผู้ช่วยประจำกลุ่ม LINE ชื่อ Calyx เป็นมิตร สุภาพ ตอบสั้นกระชับ เป็นกันเอง
 """
 
-# ฟังก์ชันเรียก Gemini พร้อมระบบลองใหม่หากเจอ Error 503
-def generate_gemini_content(prompt_text, retries=2):
-    for attempt in range(retries + 1):
-        try:
-            response = gemini_client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=prompt_text
-            )
-            return response.text.strip()
-        except Exception as e:
-            print(f"Attempt {attempt + 1} failed with error: {e}")
-            if attempt < retries:
-                time.sleep(1)
-            else:
-                return None
+# ฟังก์ชันเรียก Gemini โดยใช้รุ่น gemini-3.8-flash
+def generate_gemini_content(prompt_text):
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=prompt_text
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error calling Gemini API: {e}")
+        return None
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -60,15 +58,14 @@ async def webhook(request: Request):
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     user_text = event.message.text
-    
+
     try:
-        # 1. ตรวจสอบความปลอดภัย
+        # 1. ให้ Gemini ตรวจความปลอดภัย
         mod_result = generate_gemini_content(f"{MODERATOR_PROMPT}\n\nข้อความที่จะตรวจ: {user_text}")
-        
+
         if mod_result and "VIOLATION" in mod_result:
             sender_id = event.source.user_id
             admin_tag = f"@{ADMIN_LINE_USER_ID}" if ADMIN_LINE_USER_ID else "แอดมิน"
-            
             warning_msg = (
                 f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
                 f"👤 ผู้ส่ง: {sender_id}\n"
@@ -78,17 +75,12 @@ def handle_text_message(event):
             send_reply(event.reply_token, warning_msg)
             return
 
-        # 2. เช็กว่ามีการพิมพ์ @calyx หรือ @Calyx หรือไม่
+        # 2. เช็กการเรียกชื่อบอท
         text_lower = user_text.lower()
-        if "@calyx" in text_lower:
-            # ตัดคำว่า @calyx ออก เพื่อส่งเฉพาะเนื้อหาคำถามไปให้ Gemini
-            clean_prompt = user_text.replace("@calyx", "").replace("@Calyx", "").strip()
-            
-            # ถ้าพิมพ์แค่ @calyx มาเฉยๆ ให้ทักทายกลับ
-            if not clean_prompt:
-                clean_prompt = "สวัสดี"
+        bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
 
-            chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {clean_prompt}")
+        if any(keyword in text_lower for keyword in bot_keywords):
+            chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}")
             if chat_result:
                 send_reply(event.reply_token, chat_result)
 
