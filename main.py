@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from fastapi import FastAPI, Request, HTTPException
 from linebot.v3 import WebhookHandler
@@ -29,6 +30,30 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 1. รายการคำหยาบ/ข้อความต้องห้าม
 BAD_WORDS = ["ควย", "สัส", "เหี้ย", "เย็ด", "มึง", "กู", "fuck", "shit"]
+
+# 2. รายการคำโฆษณา / Spam
+SPAM_WORDS = ["สล็อต", "บาคาร่า", "เว็บบา", "รายได้เสริม", "ทำงานผ่านเน็ต", "รับงาน", "ฝาก-ถอน", "เครดิตฟรี"]
+
+# ฟังก์ชันตรวจจับคำหยาบ, ข้อความโฆษณา และ ลิงก์ URL
+def is_spam_or_forbidden(text):
+    text_lower = text.lower()
+    
+    # 🔴 ตรวจหาคำหยาบ
+    found_bad = [word for word in BAD_WORDS if word in text_lower]
+    if found_bad:
+        return True, f"คำไม่เหมาะสม ({', '.join(found_bad)})"
+    
+    # 🔴 ตรวจหาคีย์เวิร์ดโฆษณา
+    found_spam = [word for word in SPAM_WORDS if word in text_lower]
+    if found_spam:
+        return True, f"ข้อความสุ่มเสี่ยงโฆษณา/Spam ({', '.join(found_spam)})"
+    
+    # 🔴 ตรวจหาการส่งลิงก์ (URL)
+    url_pattern = r"(https?://[^\s]+|www\.[^\s]+)"
+    if re.search(url_pattern, text_lower):
+        return True, "มีการส่งลิงก์/URL"
+        
+    return False, ""
 
 CHAT_PROMPT = """
 คุณคือผู้ช่วยประจำกลุ่ม LINE ชื่อ Calyx เป็นมิตร สุภาพ ตอบสั้นกระชับ เป็นกันเอง
@@ -65,16 +90,16 @@ def handle_text_message(event):
     text_lower = user_text.lower()
 
     try:
-        # 🟢 1. ตรวจคำหยาบด้วย Python
-        found_bad_word = [word for word in BAD_WORDS if word in text_lower]
-        if found_bad_word:
+        # 🟢 1. ตรวจจับคำหยาบ / โฆษณา / ลิงก์ ด้วย Python (ไม่เสียโควตา Gemini)
+        is_forbidden, reason = is_spam_or_forbidden(user_text)
+        if is_forbidden:
             sender_id = event.source.user_id
             
             # ข้อความเตือนตอบกลับลงในกลุ่ม
             group_warning = (
                 f"⚠️ ตรวจพบเนื้อหาไม่เหมาะสม!\n"
                 f"👤 ผู้ส่ง: {sender_id}\n"
-                f"📋 คำที่พบ: {', '.join(found_bad_word)}\n\n"
+                f"📋 สาเหตุ: {reason}\n\n"
                 f"🔔 ระบบได้แจ้งเตือนแอดมินเรียบร้อยแล้วครับ"
             )
             send_reply(event.reply_token, group_warning)
@@ -83,15 +108,15 @@ def handle_text_message(event):
             if ADMIN_LINE_USER_ID:
                 private_alert = (
                     f"🚨 [เตือนด่วนแอดมิน]\n"
-                    f"พบการพิมพ์คำไม่เหมาะสมในกลุ่ม!\n"
+                    f"พบข้อความไม่เหมาะสมในกลุ่ม!\n"
                     f"👤 ผู้ส่ง (User ID): {sender_id}\n"
                     f"💬 ข้อความ: \"{user_text}\"\n"
-                    f"📋 คำหยาบที่พบ: {', '.join(found_bad_word)}"
+                    f"📋 สาเหตุที่พบ: {reason}"
                 )
                 send_private_push(ADMIN_LINE_USER_ID, private_alert)
             return
 
-        # 🟢 2. คุยตอบเมื่อทักชื่อบอท
+        # 🟢 2. คุยตอบเมื่อทักชื่อบอท (เรียกใช้ Gemini)
         bot_keywords = ["บอท", "bot", "calyx", "แคลกซ์", "@calyx"]
         if any(keyword in text_lower for keyword in bot_keywords):
             chat_result = generate_gemini_content(f"{CHAT_PROMPT}\n\nผู้ใช้พิมพ์ว่า: {user_text}")
