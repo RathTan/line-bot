@@ -6,6 +6,7 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, MessagingApiBlob, ReplyMessageRequest, TextMessage
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 from google import genai
+from google.genai import types
 from PIL import Image
 
 app = FastAPI()
@@ -15,9 +16,8 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 2. ใส่ LINE User ID ของ Admin กลุ่มที่นี่ (ถ้ามีหลายคนใช้สัญลักษณ์จุลภาค , คั่นได้)
-# หมายเหตุ: สามารถหา User ID ได้จาก Log ของ Render เวลา Admin พิมพ์ข้อความในกลุ่ม
-ADMIN_LINE_USER_ID = "chanhouse"
+# 2. ใส่ LINE User ID ของ Admin กลุ่มที่นี่ (เว้นว่างไว้ก่อนได้ครับ)
+ADMIN_LINE_USER_ID = ""
 
 # ตั้งค่า LINE SDK
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -57,9 +57,11 @@ def handle_text_message(event):
     
     # ส่งข้อความไปให้ Gemini วิเคราะห์
     response = gemini_client.models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-2.5-flash",
         contents=user_text,
-        config={"system_instruction": SYSTEM_INSTRUCTION}
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION
+        )
     )
     
     result = response.text.strip()
@@ -84,7 +86,7 @@ def handle_text_message(event):
                 )
             )
     else:
-        # กรณีข้อความปกติ (SAFE) - สั่งตอบกลับผลตรวจชั่วคราวเพื่อทดสอบว่าบอททำงาน
+        # กรณีข้อความปกติ (SAFE)
         reply_txt = f"🤖 ผลการตรวจสอบ:\n{result}"
         
         with ApiClient(configuration) as api_client:
