@@ -1,5 +1,5 @@
 import os
-import io
+import time
 from fastapi import FastAPI, Request, HTTPException
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -14,6 +14,7 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# LINE User ID สำหรับแท็กแอดมิน
 ADMIN_LINE_USER_ID = "Ce6d78c2ac3b5d00bc369a54ae6fe2921"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -32,20 +33,21 @@ CHAT_PROMPT = """
 คุณคือผู้ช่วยประจำกลุ่ม LINE ชื่อ Calyx เป็นมิตร สุภาพ ตอบสั้นกระชับ เป็นกันเอง
 """
 
-# ฟังก์ชันช่วยเรียก Gemini แบบมีรุ่นสำรองกัน 503
-def generate_gemini_content(prompt_text):
-    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
-    for model_name in models_to_try:
+# ฟังก์ชันเรียก Gemini รุ่น gemini-3.8-flash พร้อมระบบลองใหม่เมื่อเซิร์ฟเวอร์แน่น (503)
+def generate_gemini_content(prompt_text, retries=2):
+    for attempt in range(retries + 1):
         try:
             response = gemini_client.models.generate_content(
-                model=model_name,
+                model="gemini-3.8-flash",
                 contents=prompt_text
             )
             return response.text.strip()
         except Exception as e:
-            print(f"Error with model {model_name}: {e}")
-            continue
-    return None
+            print(f"Attempt {attempt + 1} error: {e}")
+            if attempt < retries:
+                time.sleep(1)
+            else:
+                return None
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -67,11 +69,12 @@ def handle_text_message(event):
 
         if mod_result and "VIOLATION" in mod_result:
             sender_id = event.source.user_id
+            admin_tag = f"@{ADMIN_LINE_USER_ID}" if ADMIN_LINE_USER_ID else "แอดมิน"
             warning_msg = (
                 f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
                 f"👤 ผู้ส่ง: {sender_id}\n"
                 f"📋 เหตุผล: {mod_result}\n\n"
-                f"🔔 แจ้งเตือนแอดมิน โปรดตรวจสอบครับ"
+                f"🔔 แจ้งเตือนแอดมิน {admin_tag} โปรดตรวจสอบครับ"
             )
             send_reply(event.reply_token, warning_msg)
             return
@@ -97,4 +100,3 @@ def send_reply(reply_token, text):
                 messages=[TextMessage(text=text)]
             )
         )
-
