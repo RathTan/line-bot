@@ -10,10 +10,14 @@ from PIL import Image
 
 app = FastAPI()
 
-# 1. ใส่ Key ทั้ง 3 ตัวตรงนี้ (หรือดึงจาก Environment Variables)
-LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "6a2cb56f5c5bc79cdc7337d676332899")
-LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "+JRnWH/QUopWFr8MB2LZlEw/Ww9S7G3lLR37yk0fHewOFu7sH3Q32l8t2QsLR0h+WPQD4pdgsHCzE/iBQwLB6ZBxQrXovp2ajEL1nZgWupCDAjgMK3RP6mljs5C4Hijo2R7osYAK5PXO1JbIYVWBNAdB04t89/1O/w1cDnyilFU=")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "RathTan")
+# 1. ดึง Keys จาก Environment Variables บน Render
+LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+# 2. ใส่ LINE User ID ของ Admin กลุ่มที่นี่ (ถ้ามีหลายคนใช้สัญลักษณ์จุลภาค , คั่นได้)
+# หมายเหตุ: สามารถหา User ID ได้จาก Log ของ Render เวลา Admin พิมพ์ข้อความในกลุ่ม
+ADMIN_LINE_USER_ID = "chanhouse"
 
 # ตั้งค่า LINE SDK
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -60,9 +64,17 @@ def handle_text_message(event):
     
     result = response.text.strip()
     
-    # ถ้า Gemini เตือนว่ามีการละเมิดกฎ ให้บอทตอบเตือนในกลุ่ม
+    # กรณีตรวจพบการละเมิดกฎ (VIOLATION)
     if "VIOLATION" in result:
-        warning_msg = f"⚠️ เตือนความประพฤติ:\n{result}"
+        sender_id = event.source.user_id
+        
+        warning_msg = (
+            f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
+            f"👤 ผู้ส่ง: {sender_id}\n"
+            f"📋 เหตุผล: {result}\n\n"
+            f"🔔 แจ้งเตือนแอดมิน: @{ADMIN_LINE_USER_ID} โปรดตรวจสอบและจัดการครับ"
+        )
+        
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
             line_bot_api.reply_message(
@@ -71,35 +83,15 @@ def handle_text_message(event):
                     messages=[TextMessage(text=warning_msg)]
                 )
             )
-
-# ดักจับรูปภาพ
-@handler.add(MessageEvent, message=ImageMessageContent)
-def handle_image_message(event):
-    message_id = event.message.id
-    
-    # โหลดไฟล์รูปจาก LINE
-    with ApiClient(configuration) as api_client:
-        line_bot_blob_api = MessagingApiBlob(api_client)
-        image_bytes = line_bot_blob_api.get_message_content(message_id)
+    else:
+        # กรณีข้อความปกติ (SAFE) - สั่งตอบกลับผลตรวจชั่วคราวเพื่อทดสอบว่าบอททำงาน
+        reply_txt = f"🤖 ผลการตรวจสอบ:\n{result}"
         
-    image = Image.open(io.BytesIO(image_bytes))
-    
-    # ส่งรูปภาพไปให้ Gemini วิเคราะห์
-    response = gemini_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[image, "วิเคราะห์รูปนี้ว่าปลอดภัยหรือขัดต่อกฎหรือไม่"],
-        config={"system_instruction": SYSTEM_INSTRUCTION}
-    )
-    
-    result = response.text.strip()
-    
-    if "VIOLATION" in result:
-        warning_msg = f"⚠️ เตือนรูปภาพไม่อนุญาต:\n{result}"
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
             line_bot_api.reply_message(
                 ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=warning_msg)]
+                    messages=[TextMessage(text=reply_txt)]
                 )
             )
