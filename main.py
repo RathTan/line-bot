@@ -11,12 +11,12 @@ from PIL import Image
 
 app = FastAPI()
 
-# 1. ดึง Keys จาก Environment Variables บน Render
+# ดึง Keys จาก Environment Variables บน Render
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 2. ใส่ LINE User ID ของ Admin กลุ่มที่นี่ (เว้นว่างไว้ก่อนได้ครับ)
+# ใส่ LINE User ID ของ Admin (เว้นว่างไว้ก่อนได้ครับ)
 ADMIN_LINE_USER_ID = ""
 
 # ตั้งค่า LINE SDK
@@ -29,7 +29,7 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 # System Prompt กำหนดบทบาทให้ Gemini ตรวจสอบเนื้อหา
 SYSTEM_INSTRUCTION = """
 คุณคือระบบผู้ช่วยดูแลความปลอดภัยใน LINE Group (Moderator Bot)
-หน้าที่ของคุณคือวิเคราะห์ข้อความหรือรูปภาพว่าเข้าข่ายละเมิดกฎกลุ่มหรือไม่:
+หน้าที่ของคุณคือวิเคราะห์ข้อความว่าเข้าข่ายละเมิดกฎกลุ่มหรือไม่:
 1. คำหยาบคาย รุนแรง หรือสร้างความเกลียดชัง (Hate Speech)
 2. โฆษณาสแปม พนันออนไลน์ หลอกลวง (Spam / Scam)
 3. ภาพอนาจาร / สื่อลามก (NSFW)
@@ -66,7 +66,7 @@ def handle_text_message(event):
     
     result = response.text.strip()
     
-    # กรณีตรวจพบการละเมิดกฎ (VIOLATION)
+    # กรณีตรวจพบการละเมิดกฎ (VIOLATION) ถึงจะส่งข้อความเตือน
     if "VIOLATION" in result:
         sender_id = event.source.user_id
         
@@ -74,7 +74,7 @@ def handle_text_message(event):
             f"⚠️ ตรวจพบเนื้อหาละเมิดกฎกลุ่ม!\n"
             f"👤 ผู้ส่ง: {sender_id}\n"
             f"📋 เหตุผล: {result}\n\n"
-            f"🔔 แจ้งเตือนแอดมิน: @{ADMIN_LINE_USER_ID} โปรดตรวจสอบและจัดการครับ"
+            f"🔔 แจ้งเตือนแอดมิน โปรดตรวจสอบและจัดการครับ"
         )
         
         with ApiClient(configuration) as api_client:
@@ -85,15 +85,4 @@ def handle_text_message(event):
                     messages=[TextMessage(text=warning_msg)]
                 )
             )
-    else:
-        # กรณีข้อความปกติ (SAFE)
-        reply_txt = f"🤖 ผลการตรวจสอบ:\n{result}"
-        
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=reply_txt)]
-                )
-            )
+    # ถ้าขึ้น SAFE จะปล่อยผ่านไปโดยไม่ส่งข้อความใดๆ ลงกลุ่ม
