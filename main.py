@@ -48,7 +48,7 @@ def handle_text_message(event):
     user_text = event.message.text
     
     try:
-        # 1. ให้ Gemini ตรวจความปลอดภัย
+        # 1. ให้ Gemini ตรวจความปลอดภัยโดยรวม System Prompt ไว้ในข้อความเดียว
         mod_response = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=f"{MODERATOR_PROMPT}\n\nข้อความที่จะตรวจ: {user_text}"
